@@ -3,11 +3,13 @@
 namespace pocketmine\entity\mobsai;
 
 use pocketmine\entity\mobsai\AIHolder;
+//use pocketmine\entity\PigZombie;
 use pocketmine\Player;
 use pocketmine\math\Vector3;
 use pocketmine\math\Vector2;
 use pocketmine\entity\Entity;
 use pocketmine\entity\Zombie;
+use pocketmine\entity\Husk;
 use pocketmine\scheduler\CallbackTask;
 use pocketmine\network\protocol\SetEntityMotionPacket;
 use pocketmine\event\entity\EntityDamageEvent;
@@ -15,52 +17,52 @@ use pocketmine\event\entity\EntityDamageByEntityEvent;
 
 class ZombieAI{
 
-	private $plugin;
-	
+	private $AIHolder;
+
 	public $width = 0.4;  //僵尸宽度
 	private $dif = 0;
 
 	public $hatred_r = 16;  //仇恨半径
 	public $zo_hate_v = 1.4; //僵尸仇恨模式下的行走速度
 
-	public function __construct(AIHolder $plugin){
-		$this->plugin = $plugin;
-		if($this->plugin->getServer()->aiConfig["zombie"] == 1){
-			$this->plugin->getServer()->getScheduler ()->scheduleRepeatingTask ( new CallbackTask ( [
+	public function __construct(AIHolder $AIHolder){
+		$this->AIHolder = $AIHolder;
+		if($this->AIHolder->getServer()->aiConfig["zombie"] == 1){
+			$this->AIHolder->getServer()->getScheduler ()->scheduleRepeatingTask ( new CallbackTask ( [
 				$this,
 				"ZombieRandomWalkCalc"
 			] ), 10);
 
-			$this->plugin->getServer()->getScheduler ()->scheduleRepeatingTask ( new CallbackTask ( [
+			$this->AIHolder->getServer()->getScheduler ()->scheduleRepeatingTask ( new CallbackTask ( [
 				$this,
 				"ZombieRandomWalk"
-			] ), 1);
+			] ), 2);
 
-			$this->plugin->getServer()->getScheduler ()->scheduleRepeatingTask ( new CallbackTask ( [
+			$this->AIHolder->getServer()->getScheduler ()->scheduleRepeatingTask ( new CallbackTask ( [
 				$this,
 				"ZombieHateWalk"
 			] ), 10);
-			$this->plugin->getServer()->getScheduler ()->scheduleRepeatingTask ( new CallbackTask ( [
+			$this->AIHolder->getServer()->getScheduler ()->scheduleRepeatingTask ( new CallbackTask ( [
 				$this,
 				"ZombieHateFinder"
 			] ), 10);
-			$this->plugin->getServer()->getScheduler ()->scheduleRepeatingTask ( new CallbackTask ( [
+			$this->AIHolder->getServer()->getScheduler ()->scheduleRepeatingTask ( new CallbackTask ( [
 				$this,
 				"ZombieFire"
 			] ), 40);
-			$this->plugin->getServer()->getScheduler ()->scheduleRepeatingTask ( new CallbackTask ( [
+			/*$this->plugin->getServer()->getScheduler ()->scheduleRepeatingTask ( new CallbackTask ( [
 				$this,
 				"array_clear"
-			] ), 20 * 5);
+			] ), 20 * 5);*/
 		}
 	}
 
 	public function array_clear() {
-		if (count($this->plugin->zombie) != 0) {
-			foreach ($this->plugin->zombie as $eid=>$info) {
-				foreach ($this->plugin->getServer()->getLevels() as $level) {
+		if (count($this->AIHolder->zombie) != 0) {
+			foreach ($this->AIHolder->zombie as $eid=> $info) {
+				foreach ($this->AIHolder->getServer()->getLevels() as $level) {
 					if (!($level->getEntity($eid) instanceof Entity)) {
-						unset($this->plugin->zombie[$eid]);
+						unset($this->AIHolder->zombie[$eid]);
 						//echo "清除 $eid \n";
 					}
 				}
@@ -73,14 +75,14 @@ class ZombieAI{
 	 * 循环间隔：20 ticks
 	 */
 	public function ZombieRandomWalkCalc() {
-		$this->dif = $this->plugin->getServer()->getDifficulty();
+		$this->dif = $this->AIHolder->getServer()->getDifficulty();
 		//$this->getLogger()->info("僵尸数量：".count($this->plugin->zombie));
-		foreach ($this->plugin->getServer()->getLevels() as $level) {
+		foreach ($this->AIHolder->getServer()->getLevels() as $level) {
 			foreach ($level->getEntities() as $zo){
 				if($zo instanceof Zombie){
-					if ($this->plugin->willMove($zo)) {
-						if (!isset($this->plugin->zombie[$zo->getId()])){
-							$this->plugin->zombie[$zo->getId()] = array(
+					if ($this->AIHolder->willMove($zo)) {
+						if (!isset($this->AIHolder->zombie[$zo->getId()])){
+							$this->AIHolder->zombie[$zo->getId()] = array(
 								'ID' => $zo->getId(),
 								'IsChasing' => false,
 								'motionx' => 0,
@@ -107,12 +109,12 @@ class ZombieAI{
 								'canAttack' => 0,
 								'knockBack' => false,
 							);
-							$zom = &$this->plugin->zombie[$zo->getId()];
+							$zom = &$this->AIHolder->zombie[$zo->getId()];
 							$zom['x'] = $zo->getX();
 							$zom['y'] = $zo->getY();
 							$zom['z'] = $zo->getZ();
 						}
-						$zom = &$this->plugin->zombie[$zo->getId()];
+						$zom = &$this->AIHolder->zombie[$zo->getId()];
 
 						if ($zom['IsChasing'] === false) {  //自由行走模式
 							if ($zom['gotimer'] == 0 or $zom['gotimer'] == 10) {
@@ -146,20 +148,23 @@ class ZombieAI{
 							//boybook的y轴判断法
 							//$width = $this->width;
 							$pos = new Vector3 ($zom['x'] + $zom['motionx'], floor($zo->getY()) + 1,$zom['z'] + $zom['motionz']);  //目标坐标
-							$zy = $this->plugin->ifjump($zo->getLevel(),$pos);
-							if ($zy === false) {  //前方不可前进
+							$zy = $this->AIHolder->ifjump($zo->getLevel(),$pos);
 								$pos2 = new Vector3 ($zom['x'], $zom['y'] ,$zom['z']);  //目标坐标
-								if ($this->plugin->ifjump($zo->getLevel(),$pos2) === false) { //原坐标依然是悬空
+
+								if ($this->AIHolder->ifjump($zo->getLevel(),$pos2) === false) { //原坐标依然是悬空
+
 									$pos2 = new Vector3 ($zom['x'], $zom['y']-1,$zom['z']);  //下降
 									$zom['up'] = 1;
 									$zom['yup'] = 0;
 								}
-								else {
+								if ($zy === false) {  //前方不可前进
+							
+							//	else {
 									$zom['motionx'] = - $zom['motionx'];
 									$zom['motionz'] = - $zom['motionz'];
 									//转向180度，向身后走
 									$zom['up'] = 0;
-								}
+								//}
 							}
 							else {
 								$pos2 = new Vector3 ($zom['x'] + $zom['motionx'], $zy - 1 ,$zom['z'] + $zom['motionz']);  //目标坐标
@@ -175,7 +180,7 @@ class ZombieAI{
 							}
 							else {
 								//转向计算
-								$yaw = $this->plugin->getyaw($zom['motionx'], $zom['motionz']);
+								$yaw = $this->AIHolder->getyaw($zom['motionx'], $zom['motionz']);
 								//$zo->setRotation($yaw,0);
 								$zom['yaw'] = $yaw;
 								$zom['pitch'] = 0;
@@ -205,11 +210,11 @@ class ZombieAI{
 	 * 循环间隔：10 ticks
 	 */
 	public function ZombieHateFinder() {
-		foreach ($this->plugin->getServer()->getLevels () as $level) {
+		foreach ($this->AIHolder->getServer()->getLevels () as $level) {
 			foreach ($level->getEntities() as $zo) {
 				if ($zo instanceof Zombie) {
-					if (isset($this->plugin->zombie[$zo->getId()])) {
-						$zom = &$this->plugin->zombie[$zo->getId()];
+					if (isset($this->AIHolder->zombie[$zo->getId()])) {
+						$zom = &$this->AIHolder->zombie[$zo->getId()];
 						$h_r = $this->hatred_r;  //仇恨半径
 						$pos = new Vector3($zo->getX(), $zo->getY(), $zo->getZ());
 						$hatred = false;
@@ -241,17 +246,18 @@ class ZombieAI{
 	 * 循环间隔：10 ticks
 	 */
 	public function ZombieHateWalk() {
-		foreach ($this->plugin->getServer()->getLevels () as $level) {
+		foreach ($this->AIHolder->getServer()->getLevels () as $level) {
 			foreach ($level->getEntities() as $zo) {
 				if ($zo instanceof Zombie) {
-					if (isset($this->plugin->zombie[$zo->getId()])) {
-						$zom = &$this->plugin->zombie[$zo->getId()];
+					if (isset($this->AIHolder->zombie[$zo->getId()])) {
+						$zom = &$this->AIHolder->zombie[$zo->getId()];
 						//$zom['yup'] = $zom['yup'] - 1;
 						if (!$zom['knockBack']) {
 							$zom['oldv3'] = $zo->getLocation();
 							$zom['canjump'] = true;
 
 							//僵尸碰撞检测 by boybook
+							/*
 							foreach ($level->getEntities() as $zo0) {
 								if ($zo0 instanceof Zombie and !($zo0 == $zo)) {
 									if ($zo->distance($zo0) <= $this->width * 2) {
@@ -274,18 +280,18 @@ class ZombieAI{
 									}
 								}
 
-							}
+							}*/
 
 							if ($zom['IsChasing'] !== false) {
 								//echo ("是属于仇恨模式\n");
-								$p = $this->plugin->getServer()->getPlayer($zom['IsChasing']);
+								$p = $this->AIHolder->getServer()->getPlayer($zom['IsChasing']);
 								if (($p instanceof Player) === false) {
 									$zom['IsChasing'] = false;  //取消仇恨模式
 								} else {
 									//真正的行走方向计算
 									$xx = $p->getX() - $zo->getX();
 									$zz = $p->getZ() - $zo->getZ();
-									$yaw = $this->plugin->getyaw($xx,$zz);
+									$yaw = $this->AIHolder->getyaw($xx,$zz);
 									/*
 									 * x = $xxx, z = $zzz
 									 * x0 = $xx, z0 = $zz
@@ -300,54 +306,54 @@ class ZombieAI{
 									}else{
 										$bi = 0;
 									}
-
+$xxx =0;$zzz=0;
 									//根据wiki：僵尸掉血后走路更快
-									if ($zo->getHealth() == $zo->getMaxHealth()) {
+							
 										$zzz = sqrt(($this->zo_hate_v / 2.5) / ($bi * $bi + 1));
-									}else{
-										$zzz = sqrt(($this->zo_hate_v / 2) / ($bi * $bi + 1));
-									}
+					
 
 									if ($zz < 0) $zzz = -$zzz;
 									$xxx = $zzz * $bi;
-
+	
 									$zo_v2 = new Vector2($zo->getX(),$zo->getZ());
 									$p_v2 = new Vector2($p->getX(),$p->getZ());
 									if ($zo_v2->distance($p_v2) <= $this->zo_hate_v/2) {
 										$xxx = $xx;
 										$zzz = $zz;
 									}
-
+ //严重加速bug	
 									$zom['xxx'] = $xxx;
 									$zom['zzz'] = $zzz;
 
 									//计算y轴
 									//$width = $this->width;
 									$pos0 = new Vector3 ($zo->getX(), $zo->getY() + 1, $zo->getZ());  //原坐标
-									$pos = new Vector3 ($zo->getX() + $xxx, $zo->getY() + 1, $zo->getZ() + $zzz);  //目标坐标
-									//用来写僵尸宽度的
+									$pos = new Vector3 ($zo->getX() + $xxx, $zo->getY() + 1, $zo->getZ()+  $zzz);  //目标坐标
+		
+			//用来写僵尸宽度的
 									//$v = $this->zo_hate_v/2;
 									//$pos_front = new Vector3 ($zo->getX() + ($xxx/$v*($v+$this->width)), $zo->getY() + 1, $zo->getZ() + ($zzz/$v*($v+$this->width)));  //前方坐标
 									//$pos_back = new Vector3 ($zo->getX() + (-$xxx/$v*(-$v-$this->width)), $zo->getY() + 1, $zo->getZ() + (-$zzz/$v*(-$v-$this->width)));  //后方坐标
-									$zy = $this->plugin->ifjump($zo->getLevel(), $pos, true);
+									$zy = $this->AIHolder->ifjump($zo->getLevel(), $pos, true);
 
-									if ($zy === false or ($zy !== false and $this->plugin->ifjump($zo->getLevel(), $pos0, true, true) == 'fall')) {  //前方不可前进
+									if ($zy === false or ($zy !== false and $this->AIHolder->ifjump($zo->getLevel(), $pos0, true, true) == 'fall')) {  //前方不可前进
 										//真正的自由落体 by boybook
-										if ($this->plugin->ifjump($zo->getLevel(), $pos0, false) === false) { //原坐标依然是悬空
+										if ($this->AIHolder->ifjump($zo->getLevel(), $pos0, false) === false) { //原坐标依然是悬空
 											if ($zom['drop'] === false) {
 												$zom['drop'] = 0;  //僵尸下落的速度
 											}
 											$pos2 = new Vector3 ($zo->getX(), $zo->getY() - ($zom['drop'] / 2 + 1.25), $zo->getZ());  //下降
+											
 										} else {
 											$zom['drop'] = false;
-											if ($this->plugin->whatBlock($level, $pos0) == "climb") {  //梯子
+											if ($this->AIHolder->whatBlock($level, $pos0) == "climb") {  //梯子
 												$zy = $pos0->y + 0.7;
 												$pos2 = new Vector3 ($zo->getX(), $zy - 1, $zo->getZ());  //目标坐标
 											}
 											elseif ($xxx != 0 and $zzz != 0) {  //走向最近距离
-												if ($this->plugin->ifjump($zo->getLevel(), new Vector3($zo->getX() + $xxx, $zo->getY() + 1, $zo->getZ()), true) !== false) {
+												if ($this->AIHolder->ifjump($zo->getLevel(), new Vector3($zo->getX() + $xxx, $zo->getY() + 1, $zo->getZ()), true) !== false) {
 													$pos2 = new Vector3($zo->getX() + $xxx, floor($zo->getY()), $zo->getZ());  //目标坐标
-												} elseif ($this->plugin->ifjump($zo->getLevel(), new Vector3($zo->getX(), $zo->getY() + 1, $zo->getZ() + $zzz), true) !== false) {
+												} elseif ($this->AIHolder->ifjump($zo->getLevel(), new Vector3($zo->getX(), $zo->getY() + 1, $zo->getZ() + $zzz), true) !== false) {
 													$pos2 = new Vector3($zo->getX(), floor($zo->getY()), $zo->getZ() + $zzz);  //目标坐标
 												} else {
 													$pos2 = new Vector3 ($zo->getX() - $xxx / 5, floor($zo->getY()), $zo->getZ() - $zzz / 5);  //目标坐标
@@ -364,9 +370,10 @@ class ZombieAI{
 
 									$pos3 = $pos2;
 									$pos3->y = $pos3->y + 2.62;
+									
 									$ppos = $p->getLocation();
 									$ppos->y = $ppos->y + $p->getEyeHeight();
-									$pitch = $this->plugin->getpitch($pos3,$ppos);
+									$pitch = $this->AIHolder->getpitch($pos3,$ppos);
 
 									$zom['yaw'] = $yaw;
 									$zom['pitch'] = $pitch;
@@ -391,11 +398,11 @@ class ZombieAI{
 	 * 循环间隔：1 tick
 	 */
 	public function ZombieRandomWalk() {
-		foreach ($this->plugin->getServer()->getLevels() as $level) {
+		foreach ($this->AIHolder->getServer()->getLevels() as $level) {
 			foreach ($level->getEntities() as $zo) {
 				if ($zo instanceof Zombie) {
-					if (isset($this->plugin->zombie[$zo->getId()])) {
-						$zom = &$this->plugin->zombie[$zo->getId()];
+					if (isset($this->AIHolder->zombie[$zo->getId()])) {
+						$zom = &$this->AIHolder->zombie[$zo->getId()];
 						if ($zom['canAttack'] != 0) {
 							$zom['canAttack'] -= 1;
 						}
@@ -403,43 +410,24 @@ class ZombieAI{
 						//echo ($zom['IsChasing']."\n");
 
 						//真正的自由落体 by boybook
+			$drop = $zom['drop'];
+
 						if ($zom['drop'] !== false) {
-							$olddrop = $zom['drop'];
-							$zom['drop'] += 0.5;
-							$drop = $zom['drop'];
-							//echo $drop."\n";
-							$dropy = $zo->getY() - ($olddrop * 0.05 + 0.0125);
-							$posd0 = new Vector3 (floor($zo->getX()), floor($dropy), floor($zo->getZ()));
-							$posd = new Vector3 ($zo->getX(), $dropy, $zo->getZ());
-							if ($this->plugin->whatBlock($zo->getLevel(), $posd0) == "air") {
-								$zo->setPosition($posd);  //下降
-							} else {
-								for ($i = 1; $i <= $drop; $i++) {
-									$posd0->y++;
-									if ($this->plugin->whatBlock($zo->getLevel(), $posd0) != "block") {
-										$posd->y = $posd0->y;
-										$zo->setPosition($posd);  //下降完成
-										$h = $zom['drop'] * $zom['drop'] / 20;
-										$damage = $h - 3;
-										//echo($h . ": " . $damage . "\n");
-										if ($damage > 0) {
-											//$zo->attack($damage, EntityDamageEvent::CAUSE_FALL);
-											$zo->setHealth($zo->getHealth() - $damage);
-										}
-										$zom['drop'] = false;
-										break;
-									}
-								}
-							}
+							
+						
+							//$zo->motionY=	$zom['drop'] = $zo->onGround?-0.04,-(abs(1+$zo->motionY)*1.5-1);
+						$zom['drop']+=0.01;
+						//	print($zom['drop']);
 						} else {
 							$drop = 0;
+							
 						}
 
 						if ($zom['IsChasing'] !== false) {
 							if (!$zom['knockBack']) {
 								//echo $zy;
 								$zom['up'] = 0;
-								if ($this->plugin->whatBlock($level, $pos) == "water") {
+								if ($this->AIHolder->whatBlock($level, $pos) == "water") {
 									$zom['swim'] += 1;
 									if ($zom['swim'] >= 20) $zom['swim'] = 0;
 								} else {
@@ -451,14 +439,14 @@ class ZombieAI{
 								if(abs($zo->getY() - $zom['oldv3']->y) == 1 and $zom['canjump'] === true){
 									//var_dump("跳");
 									$zom['canjump'] = false;
-									$zom['jump'] = 0.5;
+									$zom['jump'] = 0.3;
 								}
 								else {
 									if ($zom['jump'] > 0.01) {
 										$zom['jump'] -= 0.1;
 									}
 									else {
-										$zom['jump'] = 0.01;
+										$zom['jump'] = 0;
 									}
 								}
 
@@ -466,13 +454,13 @@ class ZombieAI{
 
 								$pk3 = new SetEntityMotionPacket;
 								$pk3->entities = [
-									[$zo->getID(), $zom['xxx'] / 10, -$zom['swim'] / 100 + $zom['jump'] - $drop, $zom['zzz'] / 10]
+									[$zo->getID(), $zom['xxx'] / 10, $zom['jump'] - $zo->onGround?0.04:0, $zom['zzz'] / 10]
 								];
 								foreach ($zo->getViewers() as $pl) {
 									$pl->dataPacket($pk3);
 								}
 
-								$p = $this->plugin->getServer()->getPlayer($zom['IsChasing']);
+								$p = $this->AIHolder->getServer()->getPlayer($zom['IsChasing']);
 								if ($p instanceof Player) {
 									if ($p->distance($pos) <= 1.3) {
 										//僵尸的火焰点燃人类
@@ -486,8 +474,8 @@ class ZombieAI{
 											$zom['canAttack'] = 20;
 											//@$p->knockBack($zo, 0, $zom['xxx'] / 10, $zom['zzz'] / 10);
 											if ($p->isSurvival()) {
-												$zoDamage = $this->plugin->getZombieDamage($zo->getHealth());
-												$damage = $this->plugin->getPlayerDamage($p, $zoDamage);
+												$zoDamage = $this->AIHolder->getZombieDamage($zo->getHealth());
+												$damage = $this->AIHolder->getPlayerDamage($p, $zoDamage);
 												//echo $zoDamage."-".$damage."\n";
 												$p->attack($damage, new EntityDamageByEntityEvent($zo,$p,EntityDamageEvent::CAUSE_ENTITY_ATTACK,$damage));
 											}
@@ -501,7 +489,7 @@ class ZombieAI{
 								if ($zom['yup'] <= 10) {
 									$pk3 = new SetEntityMotionPacket;
 									$pk3->entities = [
-										[$zo->getID(), $zom['motionx'] / 10, $zom['motiony'] / 10, $zom['motionz'] / 10]
+										[$zo->getID(), $zom['motionx']/10 , $zom['motiony'] , $zom['motionz']/10 ]
 									];
 									foreach ($zo->getViewers() as $pl) {
 										$pl->dataPacket($pk3);
@@ -509,7 +497,7 @@ class ZombieAI{
 								} else {
 									$pk3 = new SetEntityMotionPacket;
 									$pk3->entities = [
-										[$zo->getID(), $zom['motionx'] / 10 - $zom['motiony'] / 10, $zom['motionz'] / 10]
+										[$zo->getID(), $zom['motionx']/10 ,  $zom['motiony'] , $zom['motionz']/10 ]
 									];
 									foreach ($zo->getViewers() as $pl) {
 										$pl->dataPacket($pk3);
@@ -519,7 +507,7 @@ class ZombieAI{
 
 								$pk3 = new SetEntityMotionPacket;
 								$pk3->entities = [
-									[$zo->getID(), $zom['motionx'] / 10, -$zom['motiony'] / 10, $zom['motionz'] / 10]
+									[$zo->getID(), $zom['motionx']/10, $zom['motiony'] , $zom['motionz']/10 ]
 								];
 								foreach ($zo->getViewers() as $pl) {
 									$pl->dataPacket($pk3);
@@ -538,11 +526,16 @@ class ZombieAI{
 	 * PM时间修复
 	 */
 	public function ZombieFire() {
-		foreach ($this->plugin->getServer()->getLevels() as $level) {
+		foreach ($this->AIHolder->getServer()->getLevels() as $level) {
 			foreach ($level->getEntities() as $zo){
-				if ($zo instanceof Zombie) {
+				if ($zo instanceof Zombie and !($zo instanceof Husk)) {
 					//var_dump($p->getLevel()->getTime());
-					if(0 < $level->getTime() and $level->getTime() < 13500){
+					/* Don't use time directly
+					 * Instead, get remainder of current time divided by 24,000
+					 * This tells us the time of day, which is what we really need
+					 */
+					$timeOfDay = abs($level->getTime() % 24000);
+					if(0 < $timeOfDay and $timeOfDay < 13000){
 						$v3 = new Vector3($zo->getX(), $zo->getY(), $zo->getZ());
 						$ok = true;
 						for ($y0 = $zo->getY() + 2; $y0 <= $zo->getY()+10; $y0++) {
@@ -552,7 +545,7 @@ class ZombieAI{
 								break;
 							}
 						}
-						if ($this->plugin->whatBlock($level,new Vector3($zo->getX(), floor($zo->getY() - 1), $zo->getZ())) == "water") $ok = false;
+						if ($this->AIHolder->whatBlock($level,new Vector3($zo->getX(), floor($zo->getY() - 1), $zo->getZ())) == "water") $ok = false;
 						if ($ok) $zo->setOnFire(2);
 					}
 				}
